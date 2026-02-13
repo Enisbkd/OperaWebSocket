@@ -286,9 +286,6 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
 
             logger.debug("Processing complete message: {} bytes", completePayload.length());
 
-            // Send complete message to Kafka
-            sendToKafka(completePayload);
-
             JsonNode jsonNode = objectMapper.readTree(completePayload);
 
             // Add null check before calling asText()
@@ -308,6 +305,7 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
                     break;
                 case "next":
                     handleEventMessage(jsonNode);
+                    sendToKafka(completePayload);
                     break;
                 case "error":
                     handleErrorMessage(jsonNode);
