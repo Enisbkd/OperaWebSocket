@@ -1,0 +1,81 @@
+@Override
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+        lastMessageReceived = Instant.now();
+
+        try {
+            String payload = message.getPayload();
+
+            // Handle partial messages by accumulating them
+            if (!message.isLast()) {
+                logger.debug("Received partial message chunk ({} bytes), accumulating...", payload.length());
+                synchronized (messageBuffer) {
+                    messageBuffer.append(payload);
+                }
+                return;
+            }
+
+            // This is the last chunk (or a complete message)
+            String completePayload;
+            synchronized (messageBuffer) {
+                if (messageBuffer.length() > 0) {
+                    // Append final chunk and get complete message
+                    messageBuffer.append(payload);
+                    completePayload = messageBuffer.toString();
+                    messageBuffer.setLength(0); // Clear buffer
+                    logger.debug("Assembled complete message from {} chunks ({} bytes)",
+                            "multiple", completePayload.length());
+                } else {
+                    // Single complete message
+                    completePayload = payload;
+                }
+            }
+
+            logger.debug("Processing complete message: {} bytes", completePayload.length());
+
+            // Send complete message to Kafka
+            sendToKafka(completePayload);
+
+            JsonNode jsonNode = objectMapper.readTree(completePayload);
+
+            // Add null check before calling asText()
+            JsonNode typeNode = jsonNode.get("type");
+            if (typeNode == null) {
+                logger.warn("Received message without 'type' field. Message length: {} bytes. First 200 chars: {}",
+                        completePayload.length(),
+                        completePayload.substring(0, Math.min(200, completePayload.length())));
+                return;
+            }
+
+            String messageType = typeNode.asText();
+
+            switch (messageType) {
+                case "connection_ack":
+                    handleConnectionAck(jsonNode);
+                    break;
+                case "next":
+                    handleEventMessage(jsonNode);
+                    break;
+                case "error":
+                    handleErrorMessage(jsonNode);
+                    break;
+                case "complete":
+                    handleCompleteMessage(jsonNode);
+                    break;
+                case "pong":
+                    logger.debug("Pong received - connection alive");
+                    break;
+                default:
+                    logger.warn("Unknown message type received: {}", messageType);
+            }
+
+        } catch (Exception e) {
+            logger.error("Error processing received message", e);
+            // Clear buffer on error to prevent corruption of next message
+            synchronized (messageBuffer) {
+                if (messageBuffer.length() > 0) {
+                    logger.warn("Clearing message buffer due to error. Lost {} bytes", messageBuffer.length());
+                    messageBuffer.setLength(0);
+                }
+            }
+        }
+    }

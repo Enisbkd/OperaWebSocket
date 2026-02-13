@@ -29,6 +29,7 @@ dependencies {
     implementation 'org.java-websocket:Java-WebSocket:1.5.3'
     implementation 'org.slf4j:slf4j-api'
     implementation 'ch.qos.logback:logback-classic'
+    implementation 'org.springframework.kafka:spring-kafka'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }

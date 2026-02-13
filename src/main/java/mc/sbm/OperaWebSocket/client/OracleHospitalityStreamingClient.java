@@ -2,6 +2,7 @@ package mc.sbm.OperaWebSocket.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import mc.sbm.OperaWebSocket.service.KafkaProducerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -100,6 +101,9 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
     @Value("${oracle.hospitality.streaming.max-text-message-buffer-size:10485760}")
     private int maxTextMessageBufferSize;
 
+    private final KafkaProducerService kafkaProducerService;
+
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AtomicReference<WebSocketSession> sessionRef = new AtomicReference<>();
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
@@ -113,6 +117,10 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
     private Instant lastMessageReceived;
 
     private static final int MAX_MESSAGE_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB limit
+
+    public OracleHospitalityStreamingClient(KafkaProducerService kafkaProducerService) {
+        this.kafkaProducerService = kafkaProducerService;
+    }
 
     @PostConstruct
     public void init() {
@@ -277,6 +285,9 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
             }
 
             logger.debug("Processing complete message: {} bytes", completePayload.length());
+
+            // Send complete message to Kafka
+            sendToKafka(completePayload);
 
             JsonNode jsonNode = objectMapper.readTree(completePayload);
 
@@ -653,5 +664,19 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
     @Override
     public boolean supportsPartialMessages() {
         return true;  // Enable partial message support for large messages
+    }
+
+    /**
+     * Sends complete message to Kafka topic
+     */
+    private void sendToKafka(String message) {
+        try {
+            // Use session ID as key for partitioning (messages from same session go to same partition)
+            kafkaProducerService.sendMessage(sessionId, message);
+            logger.debug("Complete message sent to Kafka ({} bytes)", message.length());
+        } catch (Exception e) {
+            logger.error("Failed to send message to Kafka", e);
+            // Don't fail the entire message processing if Kafka is down
+        }
     }
 }
