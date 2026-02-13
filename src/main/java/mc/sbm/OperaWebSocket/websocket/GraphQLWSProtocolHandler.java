@@ -55,6 +55,13 @@ public class GraphQLWSProtocolHandler {
     }
 
     /**
+     * Creates a complete message to signal stream completion/disconnection
+     */
+    public String createCompleteMessage() {
+        return String.format("{\"id\":\"%s\",\"type\":\"complete\"}", sessionId);
+    }
+
+    /**
      * Generates SHA-256 hash of the application key (lowercase)
      */
     public static String generateSha256Hash(String input) {

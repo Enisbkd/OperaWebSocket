@@ -129,6 +129,21 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
     public synchronized void disconnect() {
         logger.info("Disconnecting from Oracle Hospitality Streaming API");
         connectionManager.setShouldReconnect(false);
+
+        // Send complete message before closing connection
+        try {
+            if (connectionManager.isConnected()) {
+                String completeMessage = protocolHandler.createCompleteMessage();
+                sendMessage(completeMessage);
+                logger.info("Complete message sent for graceful disconnection");
+
+                // Give server a moment to process the complete message
+                Thread.sleep(500);
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to send complete message during disconnect", e);
+        }
+
         connectionManager.closeSession();
     }
 
@@ -165,7 +180,7 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
             logger.error("Error processing received message", e);
             messageAssembler.clear();
 
-            if (e instanceof RuntimeException && e.getMessage().contains("Server error")) {
+            if (e.getMessage().contains("Server error")) {
                 connectionManager.closeSession();
                 scheduleReconnect();
             }

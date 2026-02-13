@@ -50,6 +50,33 @@ public class KafkaProducerService {
     }
 
     /**
+     * Sends a message to a dynamically specified topic
+     *
+     * @param topic Topic name
+     * @param key Message key (can be null for round-robin partitioning)
+     * @param message Message content
+     */
+    public void sendMessageToTopic(String topic, String key, String message) {
+        try {
+            CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send(topic, key, message);
+
+            future.whenComplete((result, ex) -> {
+                if (ex == null) {
+                    logger.debug("Message sent successfully to topic '{}' - Partition: {}, Offset: {}, Key: {}",
+                            topic,
+                            result.getRecordMetadata().partition(),
+                            result.getRecordMetadata().offset(),
+                            key);
+                } else {
+                    logger.error("Failed to send message to Kafka topic '{}' with key '{}'", topic, key, ex);
+                }
+            });
+        } catch (Exception e) {
+            logger.error("Error sending message to Kafka topic '{}'", topic, e);
+        }
+    }
+
+    /**
      * Sends a message to Kafka topic without a key
      *
      * @param message Message content

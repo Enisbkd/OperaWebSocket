@@ -119,8 +119,37 @@ public class OracleEventMessageProcessor {
 
     private void sendToKafka(String message, String sessionId) {
         try {
+            // Parse message to extract moduleName and eventName for dynamic topic
+            JsonNode jsonNode = objectMapper.readTree(message);
+
+            // Check if this is an event message with data
+            if (jsonNode.has("type") && "next".equals(jsonNode.get("type").asText())) {
+                JsonNode payload = jsonNode.get("payload");
+                if (payload != null && payload.has("data")) {
+                    JsonNode data = payload.get("data");
+                    if (data.has("newEvent")) {
+                        JsonNode newEvent = data.get("newEvent");
+                        String moduleName = newEvent.get("moduleName").asText();
+                        String eventName = newEvent.get("eventName").asText();
+
+                        // Replace spaces with underscores for topic name
+                        String sanitizedModuleName = moduleName.replace(" ", "_");
+                        String sanitizedEventName = eventName.replace(" ", "_");
+
+                        // Create dynamic topic name: opera-RESERVATION-CHECK IN
+                        String dynamicTopic = String.format("opera-%s-%s", sanitizedModuleName, sanitizedEventName);
+
+                        kafkaProducerService.sendMessageToTopic(dynamicTopic, sessionId, message);
+                        logger.debug("Message sent to Kafka topic '{}' ({} bytes)", dynamicTopic, message.length());
+                        return;
+                    }
+                }
+            }
+
+            // Fallback: send to default topic if not an event message
             kafkaProducerService.sendMessage(sessionId, message);
-            logger.debug("Message sent to Kafka ({} bytes)", message.length());
+            logger.debug("Message sent to default Kafka topic ({} bytes)", message.length());
+
         } catch (Exception e) {
             logger.error("Failed to send message to Kafka", e);
             // Don't fail the entire message processing if Kafka is down
