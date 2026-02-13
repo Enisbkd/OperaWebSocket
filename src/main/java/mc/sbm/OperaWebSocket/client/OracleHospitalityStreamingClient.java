@@ -42,6 +42,7 @@ import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorato
  * Production-ready WebSocket client for Oracle Hospitality Integration Platform Streaming API.
  *
  * Features:
+ * - Message fragmentation and reassembly for large payloads
  * - Automatic connection management with reconnection logic
  * - Keep-alive ping mechanism (every 4 minutes to prevent 5-minute timeout)
  * - GraphQL-WS protocol support
@@ -104,11 +105,14 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
     private final AtomicBoolean shouldReconnect = new AtomicBoolean(true);
     private final String sessionId = UUID.randomUUID().toString();
+    private final StringBuilder messageBuffer = new StringBuilder(); // Accumulate fragmented messages
 
     private ScheduledExecutorService pingScheduler;
     private ScheduledExecutorService reconnectScheduler;
     private StandardWebSocketClient webSocketClient;
     private Instant lastMessageReceived;
+
+    private static final int MAX_MESSAGE_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB limit
 
     @PostConstruct
     public void init() {
@@ -239,6 +243,7 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
         logger.info("WebSocket connection established callback - Session: {}", session.getId());
     }
 
+
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         lastMessageReceived = Instant.now();
@@ -246,15 +251,44 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
         try {
             String payload = message.getPayload();
 
-            JsonNode jsonNode = objectMapper.readTree(payload);
-            
+            // Handle partial messages by accumulating them
+            if (!message.isLast()) {
+                logger.debug("Received partial message chunk ({} bytes), accumulating...", payload.length());
+                synchronized (messageBuffer) {
+                    messageBuffer.append(payload);
+                }
+                return;
+            }
+
+            // This is the last chunk (or a complete message)
+            String completePayload;
+            synchronized (messageBuffer) {
+                if (messageBuffer.length() > 0) {
+                    // Append final chunk and get complete message
+                    messageBuffer.append(payload);
+                    completePayload = messageBuffer.toString();
+                    messageBuffer.setLength(0); // Clear buffer
+                    logger.debug("Assembled complete message from {} chunks ({} bytes)",
+                            "multiple", completePayload.length());
+                } else {
+                    // Single complete message
+                    completePayload = payload;
+                }
+            }
+
+            logger.debug("Processing complete message: {} bytes", completePayload.length());
+
+            JsonNode jsonNode = objectMapper.readTree(completePayload);
+
             // Add null check before calling asText()
             JsonNode typeNode = jsonNode.get("type");
             if (typeNode == null) {
-                logger.warn("Received message without 'type' field: {}", payload);
+                logger.warn("Received message without 'type' field. Message length: {} bytes. First 200 chars: {}",
+                        completePayload.length(),
+                        completePayload.substring(0, Math.min(200, completePayload.length())));
                 return;
             }
-            
+
             String messageType = typeNode.asText();
 
             switch (messageType) {
@@ -279,6 +313,13 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
 
         } catch (Exception e) {
             logger.error("Error processing received message", e);
+            // Clear buffer on error to prevent corruption of next message
+            synchronized (messageBuffer) {
+                if (messageBuffer.length() > 0) {
+                    logger.warn("Clearing message buffer due to error. Lost {} bytes", messageBuffer.length());
+                    messageBuffer.setLength(0);
+                }
+            }
         }
     }
 
