@@ -8,14 +8,34 @@ import org.springframework.stereotype.Component;
 public class OracleStreamingProperties {
 
     private String baseUrl;
+    private String websocketUrl;
+    private String websocketKey;
     private String applicationKey;
     private String chainCode;
     private OAuth oauth = new OAuth();
     private long pingInterval = 15000;
     private long reconnectDelay = 5000;
     private int maxReconnectAttempts = 10;
+    private Proxy proxy = new Proxy();
 
     // Getters and setters
+
+    public String getWebsocketUrl() {
+        return websocketUrl;
+    }
+
+    public void setWebsocketUrl(String websocketUrl) {
+        this.websocketUrl = websocketUrl;
+    }
+
+    public String getWebsocketKey() {
+        return websocketKey;
+    }
+
+    public void setWebsocketKey(String websocketKey) {
+        this.websocketKey = websocketKey;
+    }
+
     public String getBaseUrl() { return baseUrl; }
     public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
 
@@ -37,10 +57,19 @@ public class OracleStreamingProperties {
     public int getMaxReconnectAttempts() { return maxReconnectAttempts; }
     public void setMaxReconnectAttempts(int maxReconnectAttempts) { this.maxReconnectAttempts = maxReconnectAttempts; }
 
+    public Proxy getProxy() {
+        return proxy;
+    }
+
+    public void setProxy(Proxy proxy) {
+        this.proxy = proxy;
+    }
+
     public static class OAuth {
         private String clientId;
         private String clientSecret;
         private String tokenUrl;
+        private String scope;
 
         public String getClientId() { return clientId; }
         public void setClientId(String clientId) { this.clientId = clientId; }
@@ -50,5 +79,43 @@ public class OracleStreamingProperties {
 
         public String getTokenUrl() { return tokenUrl; }
         public void setTokenUrl(String tokenUrl) { this.tokenUrl = tokenUrl; }
+
+        public String getScope() {
+            return scope;
+        }
+
+        public void setScope(String scope) {
+            this.scope = scope;
+        }
+    }
+
+    public static class Proxy {
+        private boolean enabled;
+        private String host;
+        private int port;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getHost() {
+            return host;
+        }
+
+        public void setHost(String host) {
+            this.host = host;
+        }
+
+        public int getPort() {
+            return port;
+        }
+
+        public void setPort(int port) {
+            this.port = port;
+        }
     }
 }

@@ -2,20 +2,27 @@
 oracle:
   hospitality:
     streaming:
-      base-url: "wss://mucu1ua.hospitality-api.us-ashburn-1.ocs.oc-test.com"
-      application-key: "21813bcd-a15b-4439-9b9e-66fa3d8fe4df"
-      chain-code: "${ORACLE_CHAIN_CODE}"
+      base-url: "${ORACLE_BASE_URL:wss://mucu1ua.hospitality-api.us-ashburn-1.ocs.oc-test.com}"
+      websocket-url: "${ORACLE_WEBSOCKET_URL:wss://mucu1ua.hospitality-api.us-ashburn-1.ocs.oc-test.com/ohip-ws/subscriptions}"
+      websocket-key: "${ORACLE_WEBSOCKET_KEY:50a5d8576f7288ce63f5b9ce588416a4b710c6cdc0f83a18989cc94f6be4023c}"
+      application-key: "${ORACLE_APP_KEY:21813bcd-a15b-4439-9b9e-66fa3d8fe4df}"
+      chain-code: "${ORACLE_CHAIN_CODE:SBMDEVE}"
       oauth:
-        client-id: "SBMDEVE-UAT-SBMDEV-mucu1ua-SBMACCELERATOR"
-        client-secret: "8aa5c347-32e2-4d25-8bac-7264b7e1752d"
-        token-url: "https://mucu1ua.hospitality-api.us-ashburn-1.ocs.oc-test.com/oauth/v1/tokens"
+        client-id: "${ORACLE_CLIENT_ID:SBMDEVE-UAT-SBMDEV-mucu1ua-SBMACCELERATOR}"
+        client-secret: "${ORACLE_CLIENT_SECRET:8aa5c347-32e2-4d25-8bac-7264b7e1752d}"
+        token-url: "${ORACLE_TOKEN_URL:https://mucu1ua.hospitality-api.us-ashburn-1.ocs.oc-test.com/oauth/v1/tokens}"
+        scope: "${ORACLE_OAUTH_SCOPE:urn:opc:hgbu:ws:__myscopes__}"
       ping-interval: 15000  # 15 seconds as required by Oracle
       reconnect-delay: 5000
       max-reconnect-attempts: 10
+      proxy:
+        enabled: "${PROXY_ENABLED:true}"
+        host: "${PROXY_HOST:10.62.1.10}"
+        port: "${PROXY_PORT:3128}"
 
 logging:
   level:
-    com.oracle.hospitality: DEBUG
+    mc.sbm.OperaWebSocket: DEBUG
     org.springframework.web.socket: DEBUG
 
 server:
