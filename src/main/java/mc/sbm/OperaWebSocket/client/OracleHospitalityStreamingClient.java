@@ -36,6 +36,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 
 /**
  * Production-ready WebSocket client for Oracle Hospitality Integration Platform Streaming API.
@@ -95,6 +96,9 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
     @Value("${oracle.hospitality.streaming.proxy.port:8080}")
     private int proxyPort;
 
+    @Value("${oracle.hospitality.streaming.max-text-message-buffer-size:10485760}")
+    private int maxTextMessageBufferSize;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AtomicReference<WebSocketSession> sessionRef = new AtomicReference<>();
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
@@ -109,7 +113,8 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
     @PostConstruct
     public void init() {
         webSocketClient = new StandardWebSocketClient();
-        
+        configureWebSocketContainer();
+
         // Configure proxy if enabled
         if (proxyEnabled && proxyHost != null && !proxyHost.isEmpty()) {
             configureProxy();
@@ -240,10 +245,17 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
 
         try {
             String payload = message.getPayload();
-            logger.debug("Received message: {}", payload);
 
             JsonNode jsonNode = objectMapper.readTree(payload);
-            String messageType = jsonNode.get("type").asText();
+            
+            // Add null check before calling asText()
+            JsonNode typeNode = jsonNode.get("type");
+            if (typeNode == null) {
+                logger.warn("Received message without 'type' field: {}", payload);
+                return;
+            }
+            
+            String messageType = typeNode.asText();
 
             switch (messageType) {
                 case "connection_ack":
@@ -318,7 +330,7 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
     private void sendSubscriptionMessage() {
         try {
             String subscriptionQuery = String.format(
-                    "subscription { newEvent(input: { chainCode: \\\"%s\\\" }) { " +
+                    "subscription { newEvent(input: { chainCode: \\\"%s\\\" offset: \\\"0\\\"}) { " +
                             "metadata { offset } moduleName eventName detail { oldValue newValue elementName } } }",
                     chainCode
             );
@@ -571,5 +583,34 @@ public class OracleHospitalityStreamingClient extends TextWebSocketHandler {
 
     public Instant getLastMessageReceived() {
         return lastMessageReceived;
+    }
+
+    /**
+     * Configures WebSocket container with increased buffer sizes
+     */
+    private void configureWebSocketContainer() {
+        try {
+            WebSocketContainer container = ContainerProvider.getWebSocketContainer();
+
+            // Set maximum text message buffer size (configurable)
+            container.setDefaultMaxTextMessageBufferSize(maxTextMessageBufferSize);
+
+            // Set maximum binary message buffer size
+            container.setDefaultMaxBinaryMessageBufferSize(maxTextMessageBufferSize);
+
+            // Set session idle timeout (5 minutes)
+            container.setDefaultMaxSessionIdleTimeout(300000);
+
+            webSocketClient = new StandardWebSocketClient(container);
+
+            logger.info("WebSocket container configured - Max message size: {} bytes", maxTextMessageBufferSize);
+        } catch (Exception e) {
+            logger.error("Failed to configure WebSocket container", e);
+        }
+    }
+
+    @Override
+    public boolean supportsPartialMessages() {
+        return true;  // Enable partial message support for large messages
     }
 }
