@@ -1,0 +1,22 @@
+
+oracle:
+  hospitality:
+    streaming:
+      base-url: "wss://mucu1ua.hospitality-api.us-ashburn-1.ocs.oc-test.com"
+      application-key: "21813bcd-a15b-4439-9b9e-66fa3d8fe4df"
+      chain-code: "${ORACLE_CHAIN_CODE}"
+      oauth:
+        client-id: "SBMDEVE-UAT-SBMDEV-mucu1ua-SBMACCELERATOR"
+        client-secret: "8aa5c347-32e2-4d25-8bac-7264b7e1752d"
+        token-url: "https://mucu1ua.hospitality-api.us-ashburn-1.ocs.oc-test.com/oauth/v1/tokens"
+      ping-interval: 15000  # 15 seconds as required by Oracle
+      reconnect-delay: 5000
+      max-reconnect-attempts: 10
+
+logging:
+  level:
+    com.oracle.hospitality: DEBUG
+    org.springframework.web.socket: DEBUG
+
+server:
+  port: 8084
