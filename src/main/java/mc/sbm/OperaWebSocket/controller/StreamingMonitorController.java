@@ -1,97 +1,125 @@
+
 package mc.sbm.OperaWebSocket.controller;
 
-
 import mc.sbm.OperaWebSocket.client.OracleHospitalityStreamingClient;
-import org.springframework.beans.factory.annotation.Autowired;
+import mc.sbm.OperaWebSocket.dto.ConnectionStatusResponse;
+import mc.sbm.OperaWebSocket.dto.HealthResponse;
+import mc.sbm.OperaWebSocket.dto.OperationResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * REST controller for monitoring and managing the Oracle Hospitality Streaming Client
- *
- * Endpoints:
- * - GET /api/streaming/status - Get connection status
- * - POST /api/streaming/connect - Manually trigger connection
- * - POST /api/streaming/disconnect - Manually disconnect
  */
 @RestController
 @RequestMapping("/api/streaming")
 public class StreamingMonitorController {
 
+    private static final Logger logger = LoggerFactory.getLogger(StreamingMonitorController.class);
+
     private final OracleHospitalityStreamingClient streamingClient;
 
-    @Autowired
     public StreamingMonitorController(OracleHospitalityStreamingClient streamingClient) {
         this.streamingClient = streamingClient;
     }
 
     /**
      * Get current connection status
+     *
+     * @return connection status details
      */
     @GetMapping("/status")
-    public ResponseEntity<Map<String, Object>> getStatus() {
-        Map<String, Object> status = new HashMap<>();
-        status.put("connected", streamingClient.isConnected());
-        status.put("sessionId", streamingClient.getSessionId());
-
-        Instant lastMessage = streamingClient.getLastMessageReceived();
-        status.put("lastMessageReceived", lastMessage != null ? lastMessage.toString() : "Never");
-
-        if (lastMessage != null) {
-            long secondsSinceLastMessage = java.time.Duration.between(lastMessage, Instant.now()).getSeconds();
-            status.put("secondsSinceLastMessage", secondsSinceLastMessage);
+    public ResponseEntity<ConnectionStatusResponse> getStatus() {
+        try {
+            ConnectionStatusResponse status = ConnectionStatusResponse.from(streamingClient);
+            return ResponseEntity.ok(status);
+        } catch (Exception e) {
+            logger.error("Failed to retrieve connection status", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ConnectionStatusResponse.error(e.getMessage()));
         }
-
-        return ResponseEntity.ok(status);
     }
 
     /**
      * Manually trigger connection
+     *
+     * @return operation result
      */
     @PostMapping("/connect")
-    public ResponseEntity<Map<String, String>> connect() {
+    public ResponseEntity<OperationResponse> connect() {
         try {
+            if (streamingClient.isConnected()) {
+                return ResponseEntity.ok(OperationResponse.success(
+                        "Already connected",
+                        "Connection is already established"
+                ));
+            }
+
             streamingClient.connect();
-            Map<String, String> response = new HashMap<>();
-            response.put("status", "Connection initiated");
-            return ResponseEntity.ok(response);
+            logger.info("Manual connection initiated via REST endpoint");
+
+            return ResponseEntity.ok(OperationResponse.success(
+                    "Connection initiated",
+                    "Connection process has been started"
+            ));
         } catch (Exception e) {
-            Map<String, String> response = new HashMap<>();
-            response.put("status", "Failed to initiate connection");
-            response.put("error", e.getMessage());
-            return ResponseEntity.internalServerError().body(response);
+            logger.error("Failed to initiate connection via REST endpoint", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(OperationResponse.failure("Connection failed", e.getMessage()));
         }
     }
 
     /**
      * Manually disconnect
+     *
+     * @return operation result
      */
     @PostMapping("/disconnect")
-    public ResponseEntity<Map<String, String>> disconnect() {
+    public ResponseEntity<OperationResponse> disconnect() {
         try {
+            if (!streamingClient.isConnected()) {
+                return ResponseEntity.ok(OperationResponse.success(
+                        "Already disconnected",
+                        "Connection is not active"
+                ));
+            }
+
             streamingClient.disconnect();
-            Map<String, String> response = new HashMap<>();
-            response.put("status", "Disconnected");
-            return ResponseEntity.ok(response);
+            logger.info("Manual disconnect initiated via REST endpoint");
+
+            return ResponseEntity.ok(OperationResponse.success(
+                    "Disconnected",
+                    "Connection has been terminated"
+            ));
         } catch (Exception e) {
-            Map<String, String> response = new HashMap<>();
-            response.put("status", "Failed to disconnect");
-            response.put("error", e.getMessage());
-            return ResponseEntity.internalServerError().body(response);
+            logger.error("Failed to disconnect via REST endpoint", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(OperationResponse.failure("Disconnect failed", e.getMessage()));
         }
     }
 
     /**
      * Health check endpoint
+     *
+     * @return health status
      */
     @GetMapping("/health")
-    public ResponseEntity<Map<String, String>> health() {
-        Map<String, String> health = new HashMap<>();
-        health.put("status", streamingClient.isConnected() ? "UP" : "DOWN");
-        return ResponseEntity.ok(health);
+    public ResponseEntity<HealthResponse> health() {
+        try {
+            HealthResponse health = HealthResponse.from(streamingClient);
+
+            if (health.isHealthy()) {
+                return ResponseEntity.ok(health);
+            } else {
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(health);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to retrieve health status", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(HealthResponse.error(e.getMessage()));
+        }
     }
 }
